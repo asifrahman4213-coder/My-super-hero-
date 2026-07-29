@@ -2,13 +2,13 @@ import os
 import requests
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
-import yfinance as yf
 from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+import yfinance as yf
 
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
 
-# --- Render Web Service-এর জন্য সার্ভার ---
+# --- Render Web Service সার্ভার ---
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -23,11 +23,8 @@ def run_dummy_server():
 # --- কাস্টম RSI ও SMA ক্যালকুলেটর ---
 def calculate_indicators(df, period_rsi=14, period_sma=20):
     close = df['Close']
-    
-    # Simple Moving Average (SMA)
     sma = close.rolling(window=period_sma).mean().iloc[-1]
     
-    # Relative Strength Index (RSI)
     delta = close.diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=period_rsi).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=period_rsi).mean()
@@ -37,7 +34,7 @@ def calculate_indicators(df, period_rsi=14, period_sma=20):
     
     return float(rsi.iloc[-1]), float(sma)
 
-# --- মডিউল ১: ক্রিপ্টো ট্রেডিং এনালাইসিস ---
+# --- ক্রিপ্টো এনালাইসিস ---
 def get_crypto_analysis(symbol="BTC-USD"):
     try:
         ticker = yf.Ticker(symbol)
@@ -66,7 +63,7 @@ def get_crypto_analysis(symbol="BTC-USD"):
     except Exception as e:
         return f"❌ এরর: {str(e)}"
 
-# --- মডিউল ২: টপ ১০ টেক ও এআই নিউজ ---
+# --- টেক নিউজ ---
 def get_ai_news():
     try:
         url = "https://hacker-news.firebaseio.com/v0/topstories.json"
@@ -84,38 +81,38 @@ def get_ai_news():
     except Exception as e:
         return "⚠️ নিউজ লোড করতে সমস্যা হয়েছে।"
 
-# --- টেলিগ্রাম কমান্ড হ্যান্ডলারস ---
-async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# --- টেলিগ্রাম কমান্ডস ---
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_text = (
-        "👋 **স্বাগতম আপনার মাস্টার কমান্ড সেন্টারে!**\n\n"
-        "আমি আপনার সুপার এজেন্ট। আমাকে যেসব নির্দেশ দিতে পারেন:\n"
-        "🔹 `/trade btc` - ক্রিপ্টো এনালাইসিস (যেমন: btc, eth, sol)\n"
-        "🔹 `/ainews` - টপ টেক ও এআই নিউজ ট্রেন্ড\n"
-        "🔹 `/help` - কমান্ড লিস্ট"
+        "👋 *স্বাগতম আপনার মাস্টার কমান্ড সেন্টারে!*\n\n"
+        "আমি আপনার সুপার এজেন্ট। কমান্ড লিস্ট:\n"
+        "🔹 `/trade btc` - ক্রিপ্টো এনালাইসিস\n"
+        "🔹 `/ainews` - টপ টেক ও এআই নিউজ"
     )
     await update.message.reply_text(welcome_text, parse_mode="Markdown")
 
-async def trade_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def trade(update: Update, context: ContextTypes.DEFAULT_TYPE):
     symbol = context.args[0] if context.args else "btc"
     formatted_symbol = f"{symbol.upper()}-USD"
     await update.message.reply_text("⏳ মার্কেট ডেটা প্রসেস করা হচ্ছে...")
     report = get_crypto_analysis(formatted_symbol)
     await update.message.reply_text(report, parse_mode="Markdown")
 
-async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def ainews(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🌐 লেটেস্ট নিউজ আনা হচ্ছে...")
     news = get_ai_news()
     await update.message.reply_text(news, parse_mode="Markdown", disable_web_page_preview=True)
 
-# --- মূল রানার ---
 if __name__ == "__main__":
+    # ব্যাকগ্রাউন্ডে ডামি সার্ভার চালু রাখা (Render-এর জন্য দরকারি)
     threading.Thread(target=run_dummy_server, daemon=True).start()
     
-    app = Application.builder().token(TOKEN).build()
+    # টেলিগ্রাম অ্যাপ্লিকেশন বিল্ড
+    application = ApplicationBuilder().token(TOKEN).build()
     
-    app.add_handler(CommandHandler("start", start_command))
-    app.add_handler(CommandHandler("trade", trade_command))
-    app.add_handler(CommandHandler("ainews", news_command))
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("trade", trade))
+    application.add_handler(CommandHandler("ainews", ainews))
     
-    print("🤖 Render-এ সুপার এজেন্ট চালু হয়েছে...")
-    app.run_polling()
+    print("🤖 সুপার এজেন্ট সফলভাবে চালু হয়েছে এবং কাজ করছে...")
+    application.run_polling() 

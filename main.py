@@ -1,24 +1,10 @@
 import os
 import requests
-import threading
-from http.server import HTTPServer, BaseHTTPRequestHandler
+import yfinance as yf
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-import yfinance as yf
 
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
-
-# --- Render Web Service সার্ভার ---
-class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"Bot is alive and running!")
-
-def run_dummy_server():
-    port = int(os.environ.get("PORT", 8080))
-    server = HTTPServer(('0.0.0.0', port), SimpleHTTPRequestHandler)
-    server.serve_forever()
 
 # --- কাস্টম RSI ও SMA ক্যালকুলেটর ---
 def calculate_indicators(df, period_rsi=14, period_sma=20):
@@ -104,15 +90,12 @@ async def ainews(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(news, parse_mode="Markdown", disable_web_page_preview=True)
 
 if __name__ == "__main__":
-    # ব্যাকগ্রাউন্ডে ডামি সার্ভার চালু রাখা (Render-এর জন্য দরকারি)
-    threading.Thread(target=run_dummy_server, daemon=True).start()
-    
-    # টেলিগ্রাম অ্যাপ্লিকেশন বিল্ড
+    print("🤖 টেলিগ্রাম বট ইনিশিয়ালাইজ হচ্ছে...")
     application = ApplicationBuilder().token(TOKEN).build()
     
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("trade", trade))
     application.add_handler(CommandHandler("ainews", ainews))
     
-    print("🤖 সুপার এজেন্ট সফলভাবে চালু হয়েছে এবং কাজ করছে...")
+    print("🚀 বট সফলভাবে পোলিং শুরু করেছে!")
     application.run_polling() 

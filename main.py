@@ -3,14 +3,12 @@ import requests
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import yfinance as yf
-import pandas_ta as ta
-from bs4 import BeautifulSoup
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
 
-# --- Render-এর Free Web Service সচল রাখার জন্য ডামি সার্ভার ---
+# --- Render Web Service-এর জন্য সার্ভার ---
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -22,6 +20,23 @@ def run_dummy_server():
     server = HTTPServer(('0.0.0.0', port), SimpleHTTPRequestHandler)
     server.serve_forever()
 
+# --- কাস্টম RSI ও SMA ক্যালকুলেটর ---
+def calculate_indicators(df, period_rsi=14, period_sma=20):
+    close = df['Close']
+    
+    # Simple Moving Average (SMA)
+    sma = close.rolling(window=period_sma).mean().iloc[-1]
+    
+    # Relative Strength Index (RSI)
+    delta = close.diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=period_rsi).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=period_rsi).mean()
+    
+    rs = gain / loss
+    rsi = 100 - (100 / (1 + rs))
+    
+    return float(rsi.iloc[-1]), float(sma)
+
 # --- মডিউল ১: ক্রিপ্টো ট্রেডিং এনালাইসিস ---
 def get_crypto_analysis(symbol="BTC-USD"):
     try:
@@ -30,12 +45,8 @@ def get_crypto_analysis(symbol="BTC-USD"):
         if df.empty:
             return f"⚠️ {symbol} এর কোনো ডেটা পাওয়া যায়নি।"
 
-        df['RSI'] = ta.rsi(df['Close'], length=14)
-        df['SMA_20'] = ta.sma(df['Close'], length=20)
-
         price = df['Close'].iloc[-1]
-        rsi = df['RSI'].iloc[-1]
-        sma = df['SMA_20'].iloc[-1]
+        rsi, sma = calculate_indicators(df)
 
         signal = "⚖️ মার্কেট নিউট্রাল"
         if rsi < 30 and price < sma:
@@ -55,20 +66,18 @@ def get_crypto_analysis(symbol="BTC-USD"):
     except Exception as e:
         return f"❌ এরর: {str(e)}"
 
-# --- মডিউল ২: টপ ১০ এআই নিউজ স্ক্যাপার ---
+# --- মডিউল ২: টপ ১০ টেক ও এআই নিউজ ---
 def get_ai_news():
     try:
-        url = "https://news.ycombinator.com/show"
-        headers = {"User-Agent": "Mozilla/5.0"}
-        res = requests.get(url, headers=headers)
-        soup = BeautifulSoup(res.text, "html.parser")
+        url = "https://hacker-news.firebaseio.com/v0/topstories.json"
+        top_ids = requests.get(url).json()[:5]
         
-        stories = soup.select(".titleline > a")[:5]
         news_msg = "🤖 *গ্লোবাল এআই ও টেক নিউজ ট্রেন্ড*\n━━━━━━━━━━━━━━━━━━━━\n"
-        
-        for idx, story in enumerate(stories, 1):
-            title = story.text
-            link = story['href']
+        for idx, story_id in enumerate(top_ids, 1):
+            item_url = f"https://hacker-news.firebaseio.com/v0/item/{story_id}.json"
+            story = requests.get(item_url).json()
+            title = story.get("title", "No Title")
+            link = story.get("url", "https://news.ycombinator.com")
             news_msg += f"{idx}. [{title}]({link})\n\n"
             
         return news_msg
@@ -94,13 +103,12 @@ async def trade_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(report, parse_mode="Markdown")
 
 async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🌐 লেটেস্ট এআই নিউজ আনা হচ্ছে...")
+    await update.message.reply_text("🌐 লেটেস্ট নিউজ আনা হচ্ছে...")
     news = get_ai_news()
     await update.message.reply_text(news, parse_mode="Markdown", disable_web_page_preview=True)
 
 # --- মূল রানার ---
 if __name__ == "__main__":
-    # ব্যাকগ্রাউন্ডে এইচটিটিপি সার্ভার চালুকরণ (Render-এর জন্য)
     threading.Thread(target=run_dummy_server, daemon=True).start()
     
     app = Application.builder().token(TOKEN).build()

@@ -1,5 +1,7 @@
 import os
 import requests
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 import yfinance as yf
 import pandas_ta as ta
 from bs4 import BeautifulSoup
@@ -7,6 +9,18 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
+
+# --- Render-এর Free Web Service সচল রাখার জন্য ডামি সার্ভার ---
+class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is alive and running!")
+
+def run_dummy_server():
+    port = int(os.environ.get("PORT", 8080))
+    server = HTTPServer(('0.0.0.0', port), SimpleHTTPRequestHandler)
+    server.serve_forever()
 
 # --- মডিউল ১: ক্রিপ্টো ট্রেডিং এনালাইসিস ---
 def get_crypto_analysis(symbol="BTC-USD"):
@@ -86,6 +100,9 @@ async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- মূল রানার ---
 if __name__ == "__main__":
+    # ব্যাকগ্রাউন্ডে এইচটিটিপি সার্ভার চালুকরণ (Render-এর জন্য)
+    threading.Thread(target=run_dummy_server, daemon=True).start()
+    
     app = Application.builder().token(TOKEN).build()
     
     app.add_handler(CommandHandler("start", start_command))
@@ -94,4 +111,3 @@ if __name__ == "__main__":
     
     print("🤖 Render-এ সুপার এজেন্ট চালু হয়েছে...")
     app.run_polling()
-  
